@@ -1,41 +1,36 @@
-import sqlite3
 from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
-# Initialize the SQLite database
-def init_db():
-    conn = sqlite3.connect('mood_feedback.db')  # Create or open the database file
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS feedback
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 mood TEXT,
-                 feedback TEXT)''')  # Create a table if not exists
-    conn.commit()
-    conn.close()
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Call init_db when starting the app
-init_db()
+db = SQLAlchemy(app)
 
-@app.route('/')
-def home():
-    return "Flask is running!"
+class Feedback(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    mood = db.Column(db.String(50), nullable=False)
+    feedback = db.Column(db.String(500), nullable=False)
 
-# Endpoint to save mood and feedback
-@app.route('/submit', methods=['POST'])
-def submit_feedback():
-    data = request.get_json()  # Get data from frontend
+@app.route('/save', methods=['POST'])
+def save_feedback():
+    data = request.get_json()
     mood = data.get('mood')
-    feedback = data.get('feedback')
+    feedback_text = data.get('feedback')
 
-    # Save to database
-    conn = sqlite3.connect('mood_feedback.db')
-    c = conn.cursor()
-    c.execute('INSERT INTO feedback (mood, feedback) VALUES (?, ?)', (mood, feedback))
-    conn.commit()
-    conn.close()
+    if not mood or not feedback_text:
+        return jsonify({'error': 'Mood and feedback are required.'}), 400
 
-    return jsonify({"message": "Feedback saved successfully!"})
+    new_feedback = Feedback(mood=mood, feedback=feedback_text)
+    db.session.add(new_feedback)
+    db.session.commit()
 
-if __name__ == '__main__':
+    return jsonify({'message': 'Feedback saved successfully!'}), 200
+
+if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()  # <-- inside app context
     app.run(debug=True)
